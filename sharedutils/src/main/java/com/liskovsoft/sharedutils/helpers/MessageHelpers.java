@@ -16,9 +16,30 @@ public class MessageHelpers {
     private static final int MAX_LEN = 300;
     private static final int CLEANUP_TIMEOUT_MS = 5_000;
     private static @Nullable Toast sLastToast;
-    private static final Runnable sCleanupContext = MessageHelpers::cancelToasts;
+    private static final Runnable sCleanupContext = MessageHelpers::cancelSystemToast;
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static float sTextSize;
+
+    /** Optional process-wide presentation. Callbacks run on the main thread.
+     * Implementations must not retain an Activity or re-enter MessageHelpers.
+     */
+    public interface MessagePresenter {
+        /** Return true if displayed; false keeps the normal Toast fallback. */
+        boolean show(Context context, String message, boolean isLong);
+        void cancel();
+    }
+
+    private static @Nullable MessagePresenter sMessagePresenter;
+
+    /** Register once at application startup; null restores the default presentation. */
+    public static void setMessagePresenter(@Nullable MessagePresenter presenter) {
+        runOnMain(() -> {
+            if (sMessagePresenter == presenter) return;
+            cancelSystemToast();
+            cancelPresentation();
+            sMessagePresenter = presenter;
+        });
+    }
 
     public static void showMessage(final Context ctx, final String TAG, final Throwable ex) {
         showMessage(ctx, TAG + ": %s", Helpers.toString(ex));
@@ -42,6 +63,9 @@ public class MessageHelpers {
         Runnable toast = () -> {
             try {
                 String finalMsg = Helpers.ellipsize(msg, MAX_LEN);
+                cancelSystemToast();
+                cancelPresentation();
+                if (presentMessage(context, finalMsg, isLong)) return;
                 Toast currentToast = Toast.makeText(context, finalMsg, isLong ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT);
                 fixTextSize(currentToast, context);
                 addAndCancelPrev(currentToast);
@@ -53,11 +77,7 @@ public class MessageHelpers {
             }
         };
 
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            toast.run();
-        } else {
-            new Handler(Looper.getMainLooper()).post(toast);
-        }
+        runOnMain(toast);
     }
 
     /**
@@ -120,6 +140,40 @@ public class MessageHelpers {
     }
 
     public static void cancelToasts() {
+        runOnMain(() -> {
+            cancelSystemToast();
+            cancelPresentation();
+        });
+    }
+
+    private static boolean presentMessage(Context context, String message, boolean isLong) {
+        if (sMessagePresenter == null) return false;
+        try {
+            return sMessagePresenter.show(context, message, isLong);
+        } catch (RuntimeException ex) {
+            ex.printStackTrace();
+            cancelPresentation();
+            return false;
+        }
+    }
+
+    private static void cancelPresentation() {
+        if (sMessagePresenter == null) return;
+        try {
+            sMessagePresenter.cancel();
+        } catch (RuntimeException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    private static void runOnMain(Runnable action) {
+        if (Looper.myLooper() == Looper.getMainLooper()) action.run();
+        else sHandler.post(action);
+    }
+
+    // Native Toast timers must never cancel a newer custom presentation.
+    private static void cancelSystemToast() {
+        sHandler.removeCallbacks(sCleanupContext);
         if (sLastToast != null) {
             sLastToast.cancel();
             sLastToast = null;
@@ -140,7 +194,7 @@ public class MessageHelpers {
     }
 
     private static void addAndCancelPrev(Toast newToast) {
-        cancelToasts();
+        cancelSystemToast();
 
         sLastToast = newToast;
     }
