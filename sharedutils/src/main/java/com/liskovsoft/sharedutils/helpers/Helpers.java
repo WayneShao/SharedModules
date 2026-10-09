@@ -524,11 +524,12 @@ public final class Helpers {
     }
 
     public static boolean isAndroidTVLauncher(Context context) {
-        return  isPackageExists(context, "com.amazon.tv.leanbacklauncher") || // port of the official Android TV launcher (https://github.com/tsynik/LeanbackLauncher)
-                isPackageExists(context, "com.google.android.leanbacklauncher") ||
-                isPackageExists(context, "com.google.android.tvlauncher") || // Android TV 10
-                isPackageExists(context, "com.google.android.apps.tv.launcherx") || // Google TV Home
-                isPackageExists(context, "com.spocky.projengmenu"); // Projectivity launcher
+        return  isPackageExists(context, "com.amazon.tv.leanbacklauncher") // port of the official Android TV launcher (https://github.com/tsynik/LeanbackLauncher)
+            ||  isPackageExists(context, "com.google.android.leanbacklauncher")
+            ||  isPackageExists(context, "com.google.android.tvlauncher") // Android TV 10
+            ||  isPackageExists(context, "com.google.android.apps.tv.launcherx") // Google TV Home
+            ||  isPackageExists(context, "com.spocky.projengmenu") // Projectivity launcher
+            ||  isPackageExists(context, "com.tv.leanback.launcher"); // custom vendor tv launcher
     }
 
     public static boolean isGoogleTVLauncher(Context context) {
